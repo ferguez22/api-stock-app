@@ -1,0 +1,85 @@
+@host = http://localhost:4200
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDU2NTUyMzB9.8cm18WWogyyMxRzxtYTkLZxQPwXEKY1wPymOrZLAACU
+
+
+### USUARIOS ###
+
+# Get All Users
+GET {{host}}/api/users
+
+### Register
+POST {{host}}/api/users/register
+Content-Type: application/json
+
+{
+    "name": "Admin0",
+    "email": "admin@admin.com",
+    "password": "123456",
+    "role": "admin"
+}
+
+### Login
+POST {{host}}/api/users/login
+Content-Type: application/json
+
+{
+    "email": "admin@admin.com",
+    "password": "123456"
+}
+
+##########
+
+
+
+
+### PRODUCTS ###
+### Get All Products
+GET {{host}}/api/products
+Authorization: Bearer {{token}}
+
+### Get Product by ID
+GET {{host}}/api/products/680c9f4139ed74da59162187
+Authorization: Bearer {{token}}
+
+### Create Product
+POST {{host}}/api/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "type": "Altacoz",
+    "item": "Sonido LG 27",
+    "stock": 1
+}
+
+### Update Product
+PUT {{host}}/api/products/680c9f5339ed74da59162197
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "type": "AltavozTROTE",
+    "item": "Sonido LG 27",
+    "stock": 2
+}
+
+### Delete Product
+DELETE {{host}}/api/products/680c9f4f39ed74da5916218f
+Authorization: Bearer {{token}}
+
+
+### Crear transacción (sacar o guardar)
+POST {{host}}/api/transactions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": "680c9eaa1759154f47537cfd",
+  "type": "OUT",
+  "quantity": 1
+}
+
+
+### Obtener todas las transacciones
+GET {{host}}/api/transactions
+Authorization: Bearer {{token}}
