@@ -29,3 +29,8 @@ startServer();
 server.on('error', (error) => {
     console.log('Server error:', error);
 });
+
+app.get('/', (req, res) => {
+    res.send('✅ API funcionando correctamente');
+}
+);
