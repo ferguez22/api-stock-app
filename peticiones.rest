@@ -1,6 +1,7 @@
-# @host = https://api-stock-app.onrender.com
+@host = https://api-stock-app.onrender.com
 
-@host = http://localhost:4200
+# @host = http://localhost:4200
+
 @token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDY0NDIwNTd9.PHkIUVZmpUQ206ENaUirvxOMoeC7L1xJkVR9JhhZXX8
 
 
@@ -46,6 +47,10 @@ Authorization: Bearer {{token}}
 
 ### Get Product by ID
 GET {{host}}/api/products/680c9f4139ed74da59162187
+Authorization: Bearer {{token}}
+
+### Get Product Inventory Status
+GET {{host}}/api/products/product-status/681145a01759154f47537012
 Authorization: Bearer {{token}}
 
 ### Create Product

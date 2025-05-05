@@ -1,5 +1,6 @@
 
 const Product = require('../models/products.model');
+const Transaction = require('../models/transactions.model');
 
 // Obtener todos los productos
 const getProducts = async (req, res) => {
@@ -49,6 +50,54 @@ const getProductById = async (req, res) => {
         });
     }
 }
+
+// En transactions.controllers.js
+const getProductInventoryStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Obtener el producto
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: 'Producto no encontrado' });
+    }
+    
+    // Calcular productos fuera mediante transacciones
+    const transactions = await Transaction.find({ product: id });
+    
+    let outQuantity = 0;
+    transactions.forEach(trans => {
+      if (trans.type === 'OUT') outQuantity += trans.quantity;
+      else if (trans.type === 'IN') outQuantity -= trans.quantity;
+    });
+    
+    // Si hay valores negativos (más entradas que salidas), corregir a 0
+    outQuantity = Math.max(0, outQuantity);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        product: {
+          id: product._id,
+          code: product.code,
+          type: product.type,
+          item: product.item
+        },
+        total: product.stock + outQuantity,
+        inStock: product.stock,
+        outOfStock: outQuantity
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error obteniendo estado del inventario',
+      error: error.message 
+    });
+  }
+};
 
 // Crear un nuevo producto
 const createProduct = async (req, res) => {
@@ -160,6 +209,7 @@ const deleteProductById = async (req, res) => {
 module.exports = {
     getProducts,
     getProductById,
+    getProductInventoryStatus,
     createProduct,
     updateProduct,
     deleteProductById
