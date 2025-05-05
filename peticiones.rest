@@ -1,11 +1,18 @@
+# @host = https://api-stock-app.onrender.com
+
 @host = http://localhost:4200
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDU2NTUyMzB9.8cm18WWogyyMxRzxtYTkLZxQPwXEKY1wPymOrZLAACU
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDY0NDIwNTd9.PHkIUVZmpUQ206ENaUirvxOMoeC7L1xJkVR9JhhZXX8
 
 
 ### USUARIOS ###
 
 # Get All Users
 GET {{host}}/api/users
+
+### Get User by ID
+GET {{host}}/api/users/680bbd07dd5ee10ec44ef07c
+Authorization: Bearer {{token}}
+
 
 ### Register
 POST {{host}}/api/users/register
@@ -75,7 +82,7 @@ Content-Type: application/json
 
 {
   "productId": "680c9eaa1759154f47537cfd",
-  "type": "OUT",
+  "type": "IN",
   "quantity": 1
 }
 

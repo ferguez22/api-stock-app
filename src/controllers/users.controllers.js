@@ -13,6 +13,31 @@ const getUsers = async (req, res) => {
   }
 };
 
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    console.error('Error en getUserById:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el usuario',
+      error: error.message
+    });
+  }
+};
+
 // Registro de un nuevo usuario
 const registerUser = async (req, res, next) => {
     try {
@@ -87,7 +112,8 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
-    getUsers,
+  getUsers,
+  getUserById,
   registerUser,
     loginUser,
     updateUser,
