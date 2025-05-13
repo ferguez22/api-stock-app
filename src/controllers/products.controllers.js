@@ -204,12 +204,40 @@ const deleteProductById = async (req, res) => {
     }
 };
 
-
-
+// Obtener un producto por código
+const getProductByBarcode = async (req, res) => {
+    try {
+      const { code } = req.params;
+      
+      const product = await Product.findOne({ code });
+      
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'No se encontró ningún producto con este código'
+        });
+      }
+      
+      res.status(200).json({
+        success: true,
+        data: product
+      });
+      
+    } catch (error) {
+      console.error('Error en getProductByBarcode:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al buscar el producto por código',
+        error: error.message
+      });
+    }
+  };
+  
 module.exports = {
     getProducts,
     getProductById,
     getProductInventoryStatus,
+    getProductByBarcode,
     createProduct,
     updateProduct,
     deleteProductById

@@ -79,11 +79,14 @@ Content-Type: application/json
 DELETE {{host}}/api/products/680c9f4f39ed74da5916218f
 Authorization: Bearer {{token}}
 
+################################
+### TRANSACCIONES ###
+################################
 
 ### Crear transacción (sacar o guardar)
 POST {{host}}/api/transactions
 Authorization: Bearer {{token}}
-Content-Type: application/json
+Content-Type: application/jsonº
 
 {
   "productId": "680c9eaa1759154f47537cfd",
