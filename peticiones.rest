@@ -1,11 +1,12 @@
-@host = https://api-stock-app.onrender.com
+# @host = https://api-stock-app.onrender.com
 
-# @host = http://localhost:4200
+@host = http://localhost:4200
 
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDY0NDIwNTd9.PHkIUVZmpUQ206ENaUirvxOMoeC7L1xJkVR9JhhZXX8
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDcxNTcyODh9.90isr79Z-5MRS0u5XJAk7NAviSjXQ-Od8DFAlbxvrVc
 
-
+################
 ### USUARIOS ###
+################
 
 # Get All Users
 GET {{host}}/api/users
@@ -40,13 +41,20 @@ Content-Type: application/json
 
 
 
+################
 ### PRODUCTS ###
+################
+
 ### Get All Products
 GET {{host}}/api/products
 Authorization: Bearer {{token}}
 
 ### Get Product by ID
 GET {{host}}/api/products/680c9f4139ed74da59162187
+Authorization: Bearer {{token}}
+
+### Get Product By Barcode
+GET {{host}}/api/products/barcode/SWINET882
 Authorization: Bearer {{token}}
 
 ### Get Product Inventory Status
@@ -79,9 +87,12 @@ Content-Type: application/json
 DELETE {{host}}/api/products/680c9f4f39ed74da5916218f
 Authorization: Bearer {{token}}
 
-################################
+
+
+
+########################
 ### TRANSACCIONES ###
-################################
+########################
 
 ### Crear transacción (sacar o guardar)
 POST {{host}}/api/transactions
@@ -98,3 +109,8 @@ Content-Type: application/jsonº
 ### Obtener todas las transacciones
 GET {{host}}/api/transactions
 Authorization: Bearer {{token}}
+
+### Obtener productos Out por usuario
+GET {{host}}/api/transactions/user/681e12dba5f28d348016b870/out
+Authorization: Bearer {{token}}
+

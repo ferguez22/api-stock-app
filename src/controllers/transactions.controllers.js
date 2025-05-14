@@ -74,8 +74,70 @@ const getTransactionsByProduct = async (req, res) => {
     }
 };
 
+// Obtener productos fuera de almacén por usuario
+const getUserOutProducts = async (req, res) => {
+    try {
+      const { userId } = req.params;
+      
+      // Verificar si se proporcionó un userId válido
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requiere el ID del usuario'
+        });
+      }
+      
+      // Obtener todas las transacciones para este usuario
+      const transactions = await Transaction.find({ user: userId })
+        .populate('product', 'code type item description stock')
+        .sort({ createdAt: -1 });
+      
+      // Agrupar por producto y calcular cantidades netas
+      const productMap = {};
+      
+      transactions.forEach(tx => {
+        const productId = tx.product._id.toString();
+        
+        if (!productMap[productId]) {
+          productMap[productId] = {
+            product: tx.product,
+            quantityOut: 0
+          };
+        }
+        
+        if (tx.type === 'OUT') {
+          productMap[productId].quantityOut += tx.quantity;
+        } else if (tx.type === 'IN') {
+          productMap[productId].quantityOut -= tx.quantity;
+        }
+        
+        // No permitir valores negativos
+        productMap[productId].quantityOut = Math.max(0, productMap[productId].quantityOut);
+      });
+      
+      // Filtrar solo productos que están fuera del almacén
+      const productsOut = Object.values(productMap)
+        .filter(item => item.quantityOut > 0);
+      
+      res.status(200).json({
+        success: true,
+        count: productsOut.length,
+        data: productsOut
+      });
+      
+    } catch (error) {
+      console.error('Error en getUserOutProducts:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener productos por usuario',
+        error: error.message
+      });
+    }
+  };
+
 module.exports = {
     createTransaction,
     getAllTransactions,
-    getTransactionsByProduct
+    getTransactionsByProduct,
+    getUserOutProducts
 };

@@ -51,6 +51,59 @@ const getProductById = async (req, res) => {
     }
 }
 
+// Obtener el estado del inventario de todos los productos
+const getAllProductsInventoryStatus = async (req, res) => {
+  try {
+    const products = await Product.find();
+    const transactions = await Transaction.find();
+
+    const productStatusMap = {};
+
+    // Inicializar cada producto
+    products.forEach(product => {
+      productStatusMap[product._id] = {
+        id: product._id,
+        code: product.code,
+        item: product.item,
+        total: product.stock,
+        fueraAlmacen: 0,
+        enAlmacen: product.stock
+      };
+    });
+
+    // Procesar las transacciones
+    transactions.forEach(tx => {
+      const current = productStatusMap[tx.product];
+      if (!current) return;
+
+      if (tx.type === 'OUT') {
+        current.fueraAlmacen += tx.quantity;
+        current.enAlmacen -= tx.quantity;
+      } else if (tx.type === 'IN') {
+        current.fueraAlmacen -= tx.quantity;
+        current.enAlmacen += tx.quantity;
+      }
+
+      // Limitar valores negativos
+      current.fueraAlmacen = Math.max(0, current.fueraAlmacen);
+      current.enAlmacen = Math.max(0, current.enAlmacen);
+    });
+
+    res.status(200).json({
+      success: true,
+      data: Object.values(productStatusMap)
+    });
+
+  } catch (error) {
+    console.error('Error al calcular inventario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener estado del inventario',
+      error: error.message
+    });
+  }
+};
+
 // En transactions.controllers.js
 const getProductInventoryStatus = async (req, res) => {
   try {
@@ -83,11 +136,12 @@ const getProductInventoryStatus = async (req, res) => {
           type: product.type,
           item: product.item
         },
-        total: product.stock + outQuantity,
-        inStock: product.stock,
-        outOfStock: outQuantity
+        total: product.stock,
+        inAlmacen: Math.max(product.stock - outQuantity, 0),
+        fueraAlmacen: outQuantity
       }
     });
+    
     
   } catch (error) {
     console.error('Error:', error);
@@ -231,7 +285,7 @@ const getProductByBarcode = async (req, res) => {
         error: error.message
       });
     }
-  };
+};
   
 module.exports = {
     getProducts,
@@ -240,5 +294,6 @@ module.exports = {
     getProductByBarcode,
     createProduct,
     updateProduct,
-    deleteProductById
+    deleteProductById,
+    getAllProductsInventoryStatus
 };
