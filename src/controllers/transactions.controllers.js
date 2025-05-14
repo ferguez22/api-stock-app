@@ -74,12 +74,11 @@ const getTransactionsByProduct = async (req, res) => {
     }
 };
 
-// Obtener productos fuera de almacén por usuario
+// Modificación para getUserOutProducts en tu API
 const getUserOutProducts = async (req, res) => {
     try {
       const { userId } = req.params;
       
-      // Verificar si se proporcionó un userId válido
       if (!userId) {
         return res.status(400).json({
           success: false,
@@ -101,21 +100,26 @@ const getUserOutProducts = async (req, res) => {
         if (!productMap[productId]) {
           productMap[productId] = {
             product: tx.product,
-            quantityOut: 0
+            quantityOut: 0,
+            lastExitDate: null  // Nueva propiedad para la fecha de salida
           };
         }
         
         if (tx.type === 'OUT') {
           productMap[productId].quantityOut += tx.quantity;
+          // Guardar la fecha más reciente de salida
+          if (!productMap[productId].lastExitDate || new Date(tx.createdAt) > new Date(productMap[productId].lastExitDate)) {
+            productMap[productId].lastExitDate = tx.createdAt;
+          }
         } else if (tx.type === 'IN') {
           productMap[productId].quantityOut -= tx.quantity;
         }
         
-        // No permitir valores negativos
+        // Evitar valores negativos
         productMap[productId].quantityOut = Math.max(0, productMap[productId].quantityOut);
       });
       
-      // Filtrar solo productos que están fuera del almacén
+      // Solo productos que están fuera del almacén
       const productsOut = Object.values(productMap)
         .filter(item => item.quantityOut > 0);
       
