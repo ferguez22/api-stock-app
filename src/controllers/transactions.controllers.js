@@ -137,11 +137,74 @@ const getUserOutProducts = async (req, res) => {
         error: error.message
       });
     }
+};
+  
+// Controlador para obtener productos fuera de almacén de otros usuarios
+const getOthersOutProducts = async (req, res) => {
+    try {
+      const currentUserId = req.user._id; // Usuario autenticado
+      
+      // Obtener transacciones de todos los usuarios excepto el actual
+      const transactions = await Transaction.find({ user: { $ne: currentUserId } })
+        .populate('product', 'code type item description stock')
+        .populate('user', 'name') // Importante: poblar la info del usuario para mostrarla
+        .sort({ createdAt: -1 });
+      
+      // Agrupar por producto y usuario, calculando cantidades netas
+      const productMap = {};
+      
+      transactions.forEach(tx => {
+        const productId = tx.product._id.toString();
+        const userId = tx.user._id.toString();
+        const key = `${productId}-${userId}`; // Clave compuesta
+        
+        if (!productMap[key]) {
+          productMap[key] = {
+            product: tx.product,
+            user: tx.user,
+            quantityOut: 0,
+            lastExitDate: null
+          };
+        }
+        
+        if (tx.type === 'OUT') {
+          productMap[key].quantityOut += tx.quantity;
+          // Actualizar fecha de última salida si es más reciente
+          if (!productMap[key].lastExitDate || new Date(tx.createdAt) > new Date(productMap[key].lastExitDate)) {
+            productMap[key].lastExitDate = tx.createdAt;
+          }
+        } else if (tx.type === 'IN') {
+          productMap[key].quantityOut -= tx.quantity;
+        }
+        
+        // Evitar valores negativos
+        productMap[key].quantityOut = Math.max(0, productMap[key].quantityOut);
+      });
+      
+      // Solo productos que están fuera del almacén
+      const productsOut = Object.values(productMap)
+        .filter(item => item.quantityOut > 0);
+      
+      res.status(200).json({
+        success: true,
+        count: productsOut.length,
+        data: productsOut
+      });
+      
+    } catch (error) {
+      console.error('Error en getOthersOutProducts:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener productos de otros usuarios',
+        error: error.message
+      });
+    }
   };
 
 module.exports = {
     createTransaction,
     getAllTransactions,
     getTransactionsByProduct,
-    getUserOutProducts
+    getUserOutProducts,
+    getOthersOutProducts
 };

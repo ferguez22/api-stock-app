@@ -114,3 +114,6 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/transactions/user/681e12dba5f28d348016b870/out
 Authorization: Bearer {{token}}
 
+### Obtener productos Out de los demás usuarios
+GET {{host}}/api/transactions/others/out
+Authorization: Bearer {{token}}
