@@ -139,24 +139,25 @@ const getUserOutProducts = async (req, res) => {
     }
 };
   
-// Controlador para obtener productos fuera de almacén de otros usuarios
+// Productos fuera de almacén de otros usuarios
 const getOthersOutProducts = async (req, res) => {
     try {
-      const currentUserId = req.user._id; // Usuario autenticado
+      // Obtener el ID del usuario actual desde el token
+      const currentUserId = req.user._id;
       
-      // Obtener transacciones de todos los usuarios excepto el actual
+      // Obtener todas las transacciones excepto las del usuario actual
       const transactions = await Transaction.find({ user: { $ne: currentUserId } })
         .populate('product', 'code type item description stock')
-        .populate('user', 'name') // Importante: poblar la info del usuario para mostrarla
+        .populate('user', 'name') // Para mostrar el nombre del usuario
         .sort({ createdAt: -1 });
       
-      // Agrupar por producto y usuario, calculando cantidades netas
+      // Agrupar por producto y usuario (igual que en getUserOutProducts)
       const productMap = {};
       
       transactions.forEach(tx => {
         const productId = tx.product._id.toString();
         const userId = tx.user._id.toString();
-        const key = `${productId}-${userId}`; // Clave compuesta
+        const key = `${productId}-${userId}`; // Clave compuesta para distinguir producto+usuario
         
         if (!productMap[key]) {
           productMap[key] = {
@@ -169,7 +170,7 @@ const getOthersOutProducts = async (req, res) => {
         
         if (tx.type === 'OUT') {
           productMap[key].quantityOut += tx.quantity;
-          // Actualizar fecha de última salida si es más reciente
+          // Actualizar la fecha de salida más reciente
           if (!productMap[key].lastExitDate || new Date(tx.createdAt) > new Date(productMap[key].lastExitDate)) {
             productMap[key].lastExitDate = tx.createdAt;
           }
@@ -181,7 +182,7 @@ const getOthersOutProducts = async (req, res) => {
         productMap[key].quantityOut = Math.max(0, productMap[key].quantityOut);
       });
       
-      // Solo productos que están fuera del almacén
+      // Solo productos que están realmente fuera del almacén
       const productsOut = Object.values(productMap)
         .filter(item => item.quantityOut > 0);
       
