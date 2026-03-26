@@ -1,211 +1,113 @@
-const Product = require('../models/products.model');
-const Transaction = require('../models/transactions.model');
+const pool = require('../config/db');
 
-// Crear transacción (sacar o devolver producto)
 const createTransaction = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-        const { productId, quantity, type } = req.body;
-        const userId = req.user.id; // Viene del middleware de autenticación
+        const { productId, quantity, type, notes } = req.body;
+        const userId = req.user.id;
 
-        const product = await Product.findById(productId);
-        if (!product) {
-            return res.status(404).json({ message: 'Producto no encontrado' });
+        await connection.beginTransaction();
+
+        const [products] = await connection.query(
+            'SELECT * FROM products WHERE id = ? FOR UPDATE',
+            [productId]
+        );
+
+        if (products.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
         }
 
-        if (type === 'OUT') {
-            if (product.stock < quantity) {
-                return res.status(400).json({ message: 'No hay suficiente stock para sacar' });
-            }
-            product.stock -= quantity;
-        } else if (type === 'IN') {
-            product.stock += quantity;
-        } else {
-            return res.status(400).json({ message: 'Tipo de transacción inválido (debe ser IN o OUT)' });
+        const product = products[0];
+
+        if (type === 'OUT' && product.stock < quantity) {
+            await connection.rollback();
+            return res.status(400).json({ success: false, message: 'Stock insuficiente' });
         }
 
-        // Guardar la transacción
-        const transaction = new Transaction({
-            product: productId,
-            user: userId,
-            type,
-            quantity
-        });
-        await transaction.save();
+        const newStock = type === 'OUT' ? product.stock - quantity : product.stock + quantity;
 
-        // Guardar cambios en el producto
-        await product.save();
+        await connection.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, productId]);
+        await connection.query(
+            'INSERT INTO transactions (product_id, user_id, type, quantity, notes) VALUES (?, ?, ?, ?, ?)',
+            [productId, userId, type, quantity, notes || null]
+        );
 
-        res.status(201).json({ message: 'Transacción registrada', transaction });
+        await connection.commit();
+        res.status(201).json({ success: true, message: 'Transacción registrada' });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error al procesar la transacción' });
+        await connection.rollback();
+        res.status(500).json({ success: false, message: 'Error al procesar la transacción' });
+    } finally {
+        connection.release();
     }
 };
 
-// Obtener todas las transacciones
 const getAllTransactions = async (req, res) => {
     try {
-        const transactions = await Transaction.find()
-            .populate('product', 'item type') // Trae solo nombre y tipo
-            .populate('user', 'name email')    // Trae nombre y email del usuario
-            .sort({ createdAt: -1 });           // Ordenadas de la más reciente a la más vieja
-
-        res.status(200).json({ message: 'Transacciones obtenidas exitosamente', transactions });
-
+        const [rows] = await pool.query(`
+            SELECT 
+                t.*,
+                p.item AS product_item, p.code AS product_code,
+                u.name AS user_name, u.email AS user_email
+            FROM transactions t
+            LEFT JOIN products p ON t.product_id = p.id
+            LEFT JOIN users u ON t.user_id = u.id
+            ORDER BY t.created_at DESC
+        `);
+        res.status(200).json({ success: true, count: rows.length, data: rows });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error al obtener transacciones' });
+        res.status(500).json({ success: false, message: 'Error al obtener transacciones' });
     }
 };
 
-// Obtener transacciones de un solo producto
-const getTransactionsByProduct = async (req, res) => {
-    try {
-        const { productId } = req.params;
-
-        const transactions = await Transaction.find({ product: productId })
-            .populate('user', 'name email')
-            .sort({ createdAt: -1 });
-
-        res.status(200).json(transactions);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error al obtener transacciones del producto' });
-    }
-};
-
-// Modificación para getUserOutProducts en tu API
 const getUserOutProducts = async (req, res) => {
     try {
-      const { userId } = req.params;
-      
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Se requiere el ID del usuario'
-        });
-      }
-      
-      // Obtener todas las transacciones para este usuario
-      const transactions = await Transaction.find({ user: userId })
-        .populate('product', 'code type item description stock')
-        .sort({ createdAt: -1 });
-      
-      // Agrupar por producto y calcular cantidades netas
-      const productMap = {};
-      
-      transactions.forEach(tx => {
-        const productId = tx.product._id.toString();
-        
-        if (!productMap[productId]) {
-          productMap[productId] = {
-            product: tx.product,
-            quantityOut: 0,
-            lastExitDate: null  // Nueva propiedad para la fecha de salida
-          };
-        }
-        
-        if (tx.type === 'OUT') {
-          productMap[productId].quantityOut += tx.quantity;
-          // Guardar la fecha más reciente de salida
-          if (!productMap[productId].lastExitDate || new Date(tx.createdAt) > new Date(productMap[productId].lastExitDate)) {
-            productMap[productId].lastExitDate = tx.createdAt;
-          }
-        } else if (tx.type === 'IN') {
-          productMap[productId].quantityOut -= tx.quantity;
-        }
-        
-        // Evitar valores negativos
-        productMap[productId].quantityOut = Math.max(0, productMap[productId].quantityOut);
-      });
-      
-      // Solo productos que están fuera del almacén
-      const productsOut = Object.values(productMap)
-        .filter(item => item.quantityOut > 0);
-      
-      res.status(200).json({
-        success: true,
-        count: productsOut.length,
-        data: productsOut
-      });
-      
+        const { userId } = req.params;
+
+        const [rows] = await pool.query(`
+            SELECT 
+                p.id, p.code, p.item, p.brand, p.stock,
+                SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
+                SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
+            FROM transactions t
+            JOIN products p ON t.product_id = p.id
+            WHERE t.user_id = ?
+            GROUP BY p.id
+            HAVING quantityOut > 0
+        `, [userId]);
+
+        res.status(200).json({ success: true, count: rows.length, data: rows });
     } catch (error) {
-      console.error('Error en getUserOutProducts:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener productos por usuario',
-        error: error.message
-      });
+        res.status(500).json({ success: false, message: 'Error al obtener productos del usuario' });
     }
 };
-  
-// Productos fuera de almacén de otros usuarios
+
 const getOthersOutProducts = async (req, res) => {
     try {
-      // Obtener el ID del usuario actual desde el token
-      const currentUserId = req.user._id;
-      
-      // Obtener todas las transacciones excepto las del usuario actual
-      const transactions = await Transaction.find({ user: { $ne: currentUserId } })
-        .populate('product', 'code type item description stock')
-        .populate('user', 'name') // Para mostrar el nombre del usuario
-        .sort({ createdAt: -1 });
-      
-      // Agrupar por producto y usuario (igual que en getUserOutProducts)
-      const productMap = {};
-      
-      transactions.forEach(tx => {
-        const productId = tx.product._id.toString();
-        const userId = tx.user._id.toString();
-        const key = `${productId}-${userId}`; // Clave compuesta para distinguir producto+usuario
-        
-        if (!productMap[key]) {
-          productMap[key] = {
-            product: tx.product,
-            user: tx.user,
-            quantityOut: 0,
-            lastExitDate: null
-          };
-        }
-        
-        if (tx.type === 'OUT') {
-          productMap[key].quantityOut += tx.quantity;
-          // Actualizar la fecha de salida más reciente
-          if (!productMap[key].lastExitDate || new Date(tx.createdAt) > new Date(productMap[key].lastExitDate)) {
-            productMap[key].lastExitDate = tx.createdAt;
-          }
-        } else if (tx.type === 'IN') {
-          productMap[key].quantityOut -= tx.quantity;
-        }
-        
-        // Evitar valores negativos
-        productMap[key].quantityOut = Math.max(0, productMap[key].quantityOut);
-      });
-      
-      // Solo productos que están realmente fuera del almacén
-      const productsOut = Object.values(productMap)
-        .filter(item => item.quantityOut > 0);
-      
-      res.status(200).json({
-        success: true,
-        count: productsOut.length,
-        data: productsOut
-      });
-      
-    } catch (error) {
-      console.error('Error en getOthersOutProducts:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener productos de otros usuarios',
-        error: error.message
-      });
-    }
-  };
+        const currentUserId = req.user.id;
 
-module.exports = {
-    createTransaction,
-    getAllTransactions,
-    getTransactionsByProduct,
-    getUserOutProducts,
-    getOthersOutProducts
+        const [rows] = await pool.query(`
+            SELECT 
+                p.id, p.code, p.item, p.brand,
+                u.id AS user_id, u.name AS user_name,
+                SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
+                SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
+            FROM transactions t
+            JOIN products p ON t.product_id = p.id
+            JOIN users u ON t.user_id = u.id
+            WHERE t.user_id != ?
+            GROUP BY p.id, u.id
+            HAVING quantityOut > 0
+        `, [currentUserId]);
+
+        res.status(200).json({ success: true, count: rows.length, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al obtener productos de otros usuarios' });
+    }
 };
+
+module.exports = { createTransaction, getAllTransactions, getUserOutProducts, getOthersOutProducts };

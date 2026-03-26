@@ -1,121 +1,138 @@
-
-const User = require('../models/users.model');
+const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { createToken } = require('../utils/helpers');
 
-// Obtener todos los usuarios
 const getUsers = async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching users' });
-  }
+    try {
+        const [rows] = await pool.query(
+            'SELECT id, name, email, role, is_active, last_login, created_at FROM users'
+        );
+        res.status(200).json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al obtener usuarios' });
+    }
 };
 
 const getUserById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Usuario no encontrado'
-      });
+    try {
+        const [rows] = await pool.query(
+            'SELECT id, name, email, role, is_active, last_login, created_at FROM users WHERE id = ?',
+            [req.params.id]
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+        res.status(200).json({ success: true, data: rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al obtener el usuario' });
     }
-    
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    console.error('Error en getUserById:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener el usuario',
-      error: error.message
-    });
-  }
 };
 
-// Registro de un nuevo usuario
-const registerUser = async (req, res, next) => {
+const registerUser = async (req, res) => {
     try {
-        console.log('Iniciando registro de usuario');
-        req.body.password = await bcrypt.hash(req.body.password, 10);
-        console.log('Password hasheada');
-        
-        const newUser = await User.create(req.body);
-        console.log('Usuario creado:', newUser);
-        
-        res.json(newUser);
+        const { name, email, password, role } = req.body;
+
+        const [existing] = await pool.query(
+            'SELECT id FROM users WHERE email = ?', 
+            [email]
+        );
+        if (existing.length > 0) {
+            return res.status(400).json({ success: false, message: 'El email ya está registrado' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const [result] = await pool.query(
+            'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+            [name, email, hashedPassword, role || 'user']
+        );
+
+        res.status(201).json({
+            success: true,
+            data: { id: result.insertId, name, email, role: role || 'user' }
+        });
     } catch (error) {
         console.error('Error en registro:', error);
-        next(error);
+        res.status(500).json({ success: false, message: 'Error al registrar usuario' });
     }
-}
+};
 
-// Login de usuario
-const loginUser = async (req, res, next) => {
+const loginUser = async (req, res) => {
     try {
-        // Body: email, password
-        const { email, password } = req.body
+        const { email, password } = req.body;
 
-        // Existe el email en la BD ?
-        const user = await User.findOne({ email })
-        if (!user) return res.status(401), json({ Message: 'Email y/o contraseña incorrectos' })
+        const [rows] = await pool.query(
+            'SELECT * FROM users WHERE email = ? AND is_active = 1',
+            [email]
+        );
 
-        // Comparamos la contraseña
-        const same = await bcrypt.compare(password, user.password)
-        if (!same) return res.status(401).json({ Message: 'Email y/o contraseña incorrectos' })
+        if (rows.length === 0) {
+            return res.status(401).json({ success: false, message: 'Email y/o contraseña incorrectos' });
+        }
+
+        const user = rows[0];
+        const same = await bcrypt.compare(password, user.password);
+        if (!same) {
+            return res.status(401).json({ success: false, message: 'Email y/o contraseña incorrectos' });
+        }
+
+        await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
 
         res.json({
-            Message: '🚀 Login correcto 🚀 ',
+            success: true,
+            message: '🚀 Login correcto',
             token: createToken(user)
-        })
-      
+        });
+
     } catch (error) {
-        next(error)
+        console.error('Error en login:', error);
+        res.status(500).json({ success: false, message: 'Error en login' });
     }
-}
+};
 
-// Actualizar un usuario
 const updateUser = async (req, res) => {
-  try {
-    const { name, email, password, role } = req.body;
-    const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      { name, email, password, role },
-      { new: true }
-    );
-    if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    res.json(updatedUser);
-  }
-  catch (error) {
-    res.status(400).json({ message: 'Error updating user' });
-  }
-}
+    try {
+        const { name, email, password, role, is_active } = req.body;
 
-// Eliminar un usuario
+        let hashedPassword;
+        if (password) {
+            hashedPassword = await bcrypt.hash(password, 10);
+        }
+
+        const [result] = await pool.query(
+            `UPDATE users SET 
+                name      = COALESCE(?, name),
+                email     = COALESCE(?, email),
+                password  = COALESCE(?, password),
+                role      = COALESCE(?, role),
+                is_active = COALESCE(?, is_active)
+            WHERE id = ?`,
+            [name, email, hashedPassword || null, role, is_active, req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.json({ success: true, message: 'Usuario actualizado correctamente' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al actualizar usuario' });
+    }
+};
+
 const deleteUser = async (req, res) => {
-  try {
-    const deletedUser = await User.findByIdAndDelete(req.params.id);
-    if (!deletedUser) {
-      return res.status(404).json({ message: 'User not found' });
+    try {
+        const [result] = await pool.query(
+            'UPDATE users SET is_active = 0 WHERE id = ?',
+            [req.params.id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+        res.json({ success: true, message: 'Usuario desactivado correctamente' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al eliminar usuario' });
     }
-    res.json({ message: 'User deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting user' });
-  }
 };
 
-module.exports = {
-  getUsers,
-  getUserById,
-  registerUser,
-    loginUser,
-    updateUser,
-    deleteUser
-};
+module.exports = {getUsers, getUserById, registerUser, loginUser, updateUser, deleteUser };

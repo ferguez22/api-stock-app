@@ -1,40 +1,41 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/users.model');
-const { SECRET_KEY } = require('./helpers');
+const pool = require('../config/db');
 
 const checkToken = async (req, res, next) => {
     try {
-        // Verifica si existe el header de autorización
         if (!req.headers['authorization']) {
             return res.status(401).json({ message: 'No se proporcionó token' });
         }
 
-        // Extraer el token eliminando 'Bearer '
         const token = req.headers['authorization'].split(' ')[1];
-        
         if (!token) {
             return res.status(401).json({ message: 'Formato de token inválido' });
         }
 
-        console.log('Token recibido:', token); // Debug
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Verifica el token usando la SECRET_KEY
-        const payload = jwt.verify(token, SECRET_KEY);
-        console.log('Payload:', payload); // Debug
+        const [rows] = await pool.query(
+            'SELECT * FROM users WHERE id = ? AND is_active = 1',
+            [payload.usuario_id]
+        );
 
-        // Busca el usuario en la base de datos
-        const user = await User.findById(payload.usuario_id);
-        if (!user) {
-            return res.status(401).json({ message: 'Usuario no encontrado' });
+        if (rows.length === 0) {
+            return res.status(401).json({ message: 'Usuario no encontrado o inactivo' });
         }
 
-        req.user = user;
+        req.user = rows[0];
         next();
 
     } catch (error) {
-        console.error('Error en checkToken:', error);
-        return res.status(401).json({ message: 'Token inválido' });
+        return res.status(401).json({ message: 'Token inválido o expirado' });
     }
 };
 
-module.exports = { checkToken };
+const checkAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Acceso denegado: se requiere rol admin' });
+    }
+    next();
+};
+
+module.exports = { checkToken, checkAdmin };
