@@ -49,14 +49,37 @@ const getAllTransactions = async (req, res) => {
         const [rows] = await pool.query(`
             SELECT 
                 t.*,
-                p.item AS product_item, p.code AS product_code,
+                p.item AS product_item, p.code AS product_code, p.brand AS product_brand,
                 u.name AS user_name, u.email AS user_email
             FROM transactions t
             LEFT JOIN products p ON t.product_id = p.id
             LEFT JOIN users u ON t.user_id = u.id
             ORDER BY t.created_at DESC
         `);
-        res.status(200).json({ success: true, count: rows.length, data: rows });
+
+        const data = rows.map(row => ({
+            id: row.id,
+            product_id: row.product_id,
+            user_id: row.user_id,
+            type: row.type,
+            quantity: row.quantity,
+            notes: row.notes,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            product: row.product_item ? {
+                id: row.product_id,
+                item: row.product_item,
+                code: row.product_code,
+                brand: row.product_brand
+            } : null,
+            user: row.user_name ? {
+                id: row.user_id,
+                name: row.user_name,
+                email: row.user_email
+            } : null
+        }));
+
+        res.status(200).json({ success: true, count: data.length, data });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error al obtener transacciones' });
     }
