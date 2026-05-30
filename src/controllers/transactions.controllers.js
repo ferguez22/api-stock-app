@@ -3,14 +3,14 @@ const pool = require('../config/db');
 const createTransaction = async (req, res) => {
     const connection = await pool.getConnection();
     try {
-        const { productId, quantity, type, notes } = req.body;
+        const { product_id, quantity, type, notes } = req.body;
         const userId = req.user.id;
 
         await connection.beginTransaction();
 
         const [products] = await connection.query(
             'SELECT * FROM products WHERE id = ? FOR UPDATE',
-            [productId]
+            [product_id]
         );
 
         if (products.length === 0) {
@@ -30,7 +30,7 @@ const createTransaction = async (req, res) => {
         await connection.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, productId]);
         await connection.query(
             'INSERT INTO transactions (product_id, user_id, type, quantity, notes) VALUES (?, ?, ?, ?, ?)',
-            [productId, userId, type, quantity, notes || null]
+            [product_id, userId, type, quantity, notes || null]
         );
 
         await connection.commit();
