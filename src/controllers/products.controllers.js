@@ -48,10 +48,12 @@ const getProductById = async (req, res) => {
 
 const getProductByBarcode = async (req, res) => {
     try {
-        const [rows] = await pool.query(
-            'SELECT * FROM products WHERE code = ?',
-            [req.params.code]
-        );
+        const [rows] = await pool.query(`
+            SELECT p.*, c.name AS category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.code = ?
+        `, [req.params.code]);
         if (rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Producto no encontrado' });
         }
