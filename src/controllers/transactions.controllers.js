@@ -27,7 +27,7 @@ const createTransaction = async (req, res) => {
 
         const newStock = type === 'OUT' ? product.stock - quantity : product.stock + quantity;
 
-        await connection.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, productId]);
+        await connection.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, product_id]);
         await connection.query(
             'INSERT INTO transactions (product_id, user_id, type, quantity, notes) VALUES (?, ?, ?, ?, ?)',
             [product_id, userId, type, quantity, notes || null]
