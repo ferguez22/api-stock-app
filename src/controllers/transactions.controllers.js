@@ -64,8 +64,8 @@ const getAllTransactions = async (req, res) => {
             type: row.type,
             quantity: row.quantity,
             notes: row.notes,
-            created_at: row.created_at ? new Date(row.created_at).toISOString() : null,  // Corregir hora stndard
-            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,  // ← fix
+            created_at: row.created_at,
+            updated_at: row.updated_at,
             product: row.product_item ? {
                 id: row.product_id,
                 item: row.product_item,
@@ -88,21 +88,32 @@ const getAllTransactions = async (req, res) => {
 const getUserOutProducts = async (req, res) => {
     try {
         const { userId } = req.params;
-
         const [rows] = await pool.query(`
             SELECT 
                 p.id, p.code, p.item, p.brand, p.stock,
                 SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
                 SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
-                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
-            FROM transactions
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
+            FROM transactions t
             JOIN products p ON t.product_id = p.id
             WHERE t.user_id = ?
             GROUP BY p.id
             HAVING quantityOut > 0
         `, [userId]);
 
-        res.status(200).json({ success: true, count: rows.length, data: rows });
+        const data = rows.map(row => ({
+            product: {
+                id: row.id,
+                code: row.code,
+                item: row.item,
+                brand: row.brand,
+                stock: row.stock
+            },
+            quantityOut: row.quantityOut,
+            lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
+        }));
+
+        res.status(200).json({ success: true, count: data.length, data });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error al obtener productos del usuario' });
     }
@@ -111,14 +122,13 @@ const getUserOutProducts = async (req, res) => {
 const getOthersOutProducts = async (req, res) => {
     try {
         const currentUserId = req.user.id;
-
         const [rows] = await pool.query(`
             SELECT 
                 p.id, p.code, p.item, p.brand,
                 u.id AS user_id, u.name AS user_name,
                 SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
                 SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
-                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
             FROM transactions t
             JOIN products p ON t.product_id = p.id
             JOIN users u ON t.user_id = u.id
@@ -127,7 +137,22 @@ const getOthersOutProducts = async (req, res) => {
             HAVING quantityOut > 0
         `, [currentUserId]);
 
-        res.status(200).json({ success: true, count: rows.length, data: rows });
+        const data = rows.map(row => ({
+            product: {
+                id: row.id,
+                code: row.code,
+                item: row.item,
+                brand: row.brand
+            },
+            user: {
+                id: row.user_id,
+                name: row.user_name
+            },
+            quantityOut: row.quantityOut,
+            lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
+        }));
+
+        res.status(200).json({ success: true, count: data.length, data });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error al obtener productos de otros usuarios' });
     }
