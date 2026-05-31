@@ -60,32 +60,29 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-
         const [rows] = await pool.query(
             'SELECT * FROM users WHERE email = ? AND is_active = 1',
             [email]
         );
 
-        if (rows.length === 0) {
+        if (rows.length === 0)
             return res.status(401).json({ success: false, message: 'Email y/o contraseña incorrectos' });
-        }
 
         const user = rows[0];
         const same = await bcrypt.compare(password, user.password);
-        if (!same) {
+        if (!same)
             return res.status(401).json({ success: false, message: 'Email y/o contraseña incorrectos' });
-        }
 
         await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
 
         res.json({
             success: true,
-            message: '🚀 Login correcto',
-            token: createToken(user)
+            message: 'Login correcto',
+            token: createToken(user),
+            password_must_change: user.password_must_change === 1  
         });
-
     } catch (error) {
-        console.error('Error en login:', error);
+        console.error('Error login:', error);
         res.status(500).json({ success: false, message: 'Error en login' });
     }
 };
@@ -93,29 +90,45 @@ const loginUser = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const { name, email, password, role, is_active } = req.body;
+        const targetId   = req.params.id;
+        const adminId    = req.user.id;
+        const isChangingOtherPassword = password && parseInt(targetId) !== adminId;
 
         let hashedPassword;
-        if (password) {
-            hashedPassword = await bcrypt.hash(password, 10);
-        }
+        if (password) hashedPassword = await bcrypt.hash(password, 10);
 
         const [result] = await pool.query(
-            `UPDATE users SET 
-                name      = COALESCE(?, name),
-                email     = COALESCE(?, email),
-                password  = COALESCE(?, password),
-                role      = COALESCE(?, role),
-                is_active = COALESCE(?, is_active)
+            `UPDATE users SET
+                name                 = COALESCE(?, name),
+                email                = COALESCE(?, email),
+                password             = COALESCE(?, password),
+                role                 = COALESCE(?, role),
+                is_active            = COALESCE(?, is_active),
+                password_must_change = CASE WHEN ? = 1 THEN 1 ELSE password_must_change END
             WHERE id = ?`,
-            [name, email, hashedPassword || null, role, is_active, req.params.id]
+            [name, email, hashedPassword || null, role, is_active,
+             isChangingOtherPassword ? 1 : 0, targetId]
         );
 
-        if (result.affectedRows === 0) {
+        if (result.affectedRows === 0)
             return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
-        }
+
+        // FIX 2: Audit log
+        const changes = [];
+        if (name)      changes.push(`name: ${name}`);
+        if (email)     changes.push(`email: ${email}`);
+        if (role)      changes.push(`role: ${role}`);
+        if (password)  changes.push('password changed');
+        if (is_active !== undefined) changes.push(`is_active: ${is_active}`);
+
+        await pool.query(
+            'INSERT INTO audit_log (admin_id, action, target_id, details) VALUES (?, ?, ?, ?)',
+            [adminId, 'UPDATE_USER', targetId, changes.join(' | ')]
+        );
 
         res.json({ success: true, message: 'Usuario actualizado correctamente' });
     } catch (error) {
+        console.error('Error updateUser:', error);
         res.status(500).json({ success: false, message: 'Error al actualizar usuario' });
     }
 };
