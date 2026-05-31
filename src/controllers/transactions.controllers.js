@@ -64,8 +64,8 @@ const getAllTransactions = async (req, res) => {
             type: row.type,
             quantity: row.quantity,
             notes: row.notes,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+            created_at: row.created_at ? new Date(row.created_at).toISOString() : null,  // Corregir hora stndard
+            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,  // ← fix
             product: row.product_item ? {
                 id: row.product_id,
                 item: row.product_item,
@@ -94,8 +94,8 @@ const getUserOutProducts = async (req, res) => {
                 p.id, p.code, p.item, p.brand, p.stock,
                 SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
                 SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
-                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
-            FROM transactions t
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
+            FROM transactions
             JOIN products p ON t.product_id = p.id
             WHERE t.user_id = ?
             GROUP BY p.id
@@ -118,7 +118,7 @@ const getOthersOutProducts = async (req, res) => {
                 u.id AS user_id, u.name AS user_name,
                 SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END) -
                 SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END) AS quantityOut,
-                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate
+                MAX(CASE WHEN t.type = 'OUT' THEN t.created_at END) AS lastExitDate: row.lastExitDate ? new Date(row.lastExitDate).toISOString() : null
             FROM transactions t
             JOIN products p ON t.product_id = p.id
             JOIN users u ON t.user_id = u.id
