@@ -25,6 +25,35 @@ const createTransaction = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Stock insuficiente' });
         }
 
+        if (type === 'IN') {
+            const [outRows] = await connection.query(`
+                SELECT COALESCE(
+                    SUM(CASE WHEN type = 'OUT' THEN quantity ELSE 0 END) -
+                    SUM(CASE WHEN type = 'IN'  THEN quantity ELSE 0 END),
+                0) AS quantityOut
+                FROM transactions
+                WHERE product_id = ? AND user_id = ?
+            `, [product_id, userId]);
+
+            const quantityOut = Number(outRows[0]?.quantityOut) || 0;
+
+            if (quantityOut === 0) {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'No tienes unidades fuera del almacén para este producto'
+                });
+            }
+
+            if (quantity > quantityOut) {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Solo tienes ${quantityOut} unidad(es) fuera del almacén`
+                });
+            }
+        }
+
         const newStock = type === 'OUT' ? product.stock - quantity : product.stock + quantity;
 
         await connection.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, product_id]);
