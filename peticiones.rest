@@ -1,30 +1,28 @@
 # @host = https://api-stock-app.onrender.com
-
-@host = http://localhost:4200
-
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoiNjgwYmJkMDdkZDVlZTEwZWM0NGVmMDdjIiwidXN1YXJpb19yb2xlIjoiYWRtaW4iLCJpYXQiOjE3NDcxNTcyODh9.90isr79Z-5MRS0u5XJAk7NAviSjXQ-Od8DFAlbxvrVc
+@host = http://localhost:3000
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c3VhcmlvX2lkIjoyLCJ1c3VhcmlvX3JvbGUiOiJhZG1pbiIsImlhdCI6MTc3NDUzODE1OSwiZXhwIjoxNzc0NTY2OTU5fQ.18wdaiEil-ywdAU_zPo7HoSDgxM8A1WhI0sdgIywBEM
 
 ################
 ### USUARIOS ###
 ################
 
-# Get All Users
+### Get All Users (solo admin)
 GET {{host}}/api/users
-
-### Get User by ID
-GET {{host}}/api/users/680bbd07dd5ee10ec44ef07c
 Authorization: Bearer {{token}}
 
+### Get User by ID
+GET {{host}}/api/users/1
+Authorization: Bearer {{token}}
 
 ### Register
 POST {{host}}/api/users/register
 Content-Type: application/json
 
 {
-    "name": "Admin0",
-    "email": "admin@admin.com",
-    "password": "123456",
-    "role": "admin"
+    "name": "Test User",
+    "email": "test@inventario.com",
+    "password": "Test1234!",
+    "role": "user"
 }
 
 ### Login
@@ -33,12 +31,62 @@ Content-Type: application/json
 
 {
     "email": "admin@admin.com",
-    "password": "123456"
+    "password": "password"
 }
 
-##########
+### Update User
+PUT {{host}}/api/users/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "Admin Actualizado"
+}
+
+### Delete User (soft delete - solo admin)
+DELETE {{host}}/api/users/2
+Authorization: Bearer {{token}}
 
 
+####################
+### CATEGORÍAS   ###
+####################
+
+### Get All Categories
+GET {{host}}/api/categories
+Authorization: Bearer {{token}}
+
+### Create Category
+POST {{host}}/api/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "TRIPODE"
+}
+
+### Create Subcategory
+POST {{host}}/api/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "C-Stand",
+    "parent_id": 1
+}
+
+### Update Category
+PUT {{host}}/api/categories/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "ILUMINACION LED"
+}
+
+### Delete Category
+DELETE {{host}}/api/categories/17
+Authorization: Bearer {{token}}
 
 
 ################
@@ -50,15 +98,19 @@ GET {{host}}/api/products
 Authorization: Bearer {{token}}
 
 ### Get Product by ID
-GET {{host}}/api/products/680c9f4139ed74da59162187
+GET {{host}}/api/products/1
 Authorization: Bearer {{token}}
 
-### Get Product By Barcode
-GET {{host}}/api/products/barcode/SWINET882
+### Get Product by Barcode
+GET {{host}}/api/products/barcode/CAM-SON-001
 Authorization: Bearer {{token}}
 
-### Get Product Inventory Status
-GET {{host}}/api/products/product-status/681145a01759154f47537012
+### Get All Products Inventory Status
+GET {{host}}/api/products/product-status
+Authorization: Bearer {{token}}
+
+### Get Product Inventory Status by ID
+GET {{host}}/api/products/product-status/1
 Authorization: Bearer {{token}}
 
 ### Create Product
@@ -67,53 +119,69 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "type": "Altacoz",
-    "item": "Sonido LG 27",
-    "stock": 1
+    "category_id": 10,
+    "brand": "CANON",
+    "item": "EOS 800D",
+    "description": "Cámara Canon EOS 800D",
+    "status": "BUENO",
+    "stock": 1,
+    "min_stock": 1,
+    "aisle": 1,
+    "shelf": 3,
+    "side": "IZQ"
 }
 
 ### Update Product
-PUT {{host}}/api/products/680c9f5339ed74da59162197
+PUT {{host}}/api/products/1
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "type": "AltavozTROTE",
-    "item": "Sonido LG 27",
-    "stock": 2
+    "stock": 5,
+    "status": "BUENO"
 }
 
 ### Delete Product
-DELETE {{host}}/api/products/680c9f4f39ed74da5916218f
+DELETE {{host}}/api/products/3
 Authorization: Bearer {{token}}
 
 
-
-
 ########################
-### TRANSACCIONES ###
+### TRANSACCIONES    ###
 ########################
 
-### Crear transacción (sacar o guardar)
+### Create Transaction OUT (sacar producto)
 POST {{host}}/api/transactions
 Authorization: Bearer {{token}}
-Content-Type: application/jsonº
+Content-Type: application/json
 
 {
-  "productId": "680c9eaa1759154f47537cfd",
-  "type": "IN",
-  "quantity": 1
+    "productId": 1,
+    "type": "OUT",
+    "quantity": 1,
+    "notes": "Préstamo para rodaje"
 }
 
+### Create Transaction IN (devolver producto)
+POST {{host}}/api/transactions
+Authorization: Bearer {{token}}
+Content-Type: application/json
 
-### Obtener todas las transacciones
+{
+    "productId": 1,
+    "type": "IN",
+    "quantity": 1,
+    "notes": "Devolución tras rodaje"
+}
+
+### Get All Transactions
 GET {{host}}/api/transactions
 Authorization: Bearer {{token}}
 
-### Obtener productos Out por usuario
-GET {{host}}/api/transactions/user/681e12dba5f28d348016b870/out
+### Get Products OUT by User
+GET {{host}}/api/transactions/user/1/out
 Authorization: Bearer {{token}}
 
-### Obtener productos Out de los demás usuarios
+### Get Products OUT de otros usuarios
 GET {{host}}/api/transactions/others/out
 Authorization: Bearer {{token}}

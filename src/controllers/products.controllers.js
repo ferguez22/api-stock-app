@@ -1,299 +1,212 @@
+const pool = require('../config/db');
 
-const Product = require('../models/products.model');
-const Transaction = require('../models/transactions.model');
+// Generar código único de producto
+const generateCode = async (category, brand) => {
+    const catPart = (category || 'XXX').substring(0, 3).toUpperCase().padEnd(3, 'X');
+    const braPart = (brand || 'XXX').substring(0, 3).toUpperCase().padEnd(3, 'X');
 
-// Obtener todos los productos
+    for (let i = 0; i < 5; i++) {
+        const randomPart = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        const code = `${catPart}-${braPart}-${randomPart}`;
+        const [existing] = await pool.query('SELECT id FROM products WHERE code = ?', [code]);
+        if (existing.length === 0) return code;
+    }
+    throw new Error('No se pudo generar un código único');
+};
+
 const getProducts = async (req, res) => {
     try {
-        console.log('Intentando obtener productos...');
-        const products = await Product.find().sort({ createdAt: -1 });
-        console.log('Productos encontrados:', products.length);
-
-        res.status(200).json({
-            success: true,
-            count: products.length,
-            data: products
-        });
-
+        const [rows] = await pool.query(`
+            SELECT p.*, c.name AS category_name 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            ORDER BY p.created_at DESC
+        `);
+        res.status(200).json({ success: true, count: rows.length, data: rows });
     } catch (error) {
-        console.error('Error en getProducts:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error al obtener los productos',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Error al obtener productos' });
     }
 };
 
-// Obtener un producto por ID
 const getProductById = async (req, res) => {
     try {
-        const { id } = req.params;
-        const product = await Product.findById(id);
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: 'Producto no encontrado'
-            });
+        const [rows] = await pool.query(`
+            SELECT p.*, c.name AS category_name 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.id = ?
+        `, [req.params.id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
         }
-        res.status(200).json({
-            success: true,
-            data: product
-        });
-    }
-    catch (error) {
-        console.error('Error en getProductById:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error al obtener el producto',
-            error: error.message
-        });
-    }
-}
-
-// Obtener el estado del inventario de todos los productos
-const getAllProductsInventoryStatus = async (req, res) => {
-  try {
-    const products = await Product.find();
-    const transactions = await Transaction.find();
-
-    const productStatusMap = {};
-
-    // Inicializar cada producto
-    products.forEach(product => {
-      productStatusMap[product._id] = {
-        id: product._id,
-        code: product.code,
-        item: product.item,
-        total: product.stock,
-        fueraAlmacen: 0,
-        enAlmacen: product.stock
-      };
-    });
-
-    // Procesar las transacciones
-    transactions.forEach(tx => {
-      const current = productStatusMap[tx.product];
-      if (!current) return;
-
-      if (tx.type === 'OUT') {
-        current.fueraAlmacen += tx.quantity;
-        current.enAlmacen -= tx.quantity;
-      } else if (tx.type === 'IN') {
-        current.fueraAlmacen -= tx.quantity;
-        current.enAlmacen += tx.quantity;
-      }
-
-      // Limitar valores negativos
-      current.fueraAlmacen = Math.max(0, current.fueraAlmacen);
-      current.enAlmacen = Math.max(0, current.enAlmacen);
-    });
-
-    res.status(200).json({
-      success: true,
-      data: Object.values(productStatusMap)
-    });
-
-  } catch (error) {
-    console.error('Error al calcular inventario:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener estado del inventario',
-      error: error.message
-    });
-  }
-};
-
-// En transactions.controllers.js
-const getProductInventoryStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Obtener el producto
-    const product = await Product.findById(id);
-    if (!product) {
-      return res.status(404).json({ message: 'Producto no encontrado' });
-    }
-    
-    // Calcular productos fuera mediante transacciones
-    const transactions = await Transaction.find({ product: id });
-    
-    let outQuantity = 0;
-    transactions.forEach(trans => {
-      if (trans.type === 'OUT') outQuantity += trans.quantity;
-      else if (trans.type === 'IN') outQuantity -= trans.quantity;
-    });
-    
-    // Si hay valores negativos (más entradas que salidas), corregir a 0
-    outQuantity = Math.max(0, outQuantity);
-    
-    res.status(200).json({
-      success: true,
-      data: {
-        product: {
-          id: product._id,
-          code: product.code,
-          type: product.type,
-          item: product.item
-        },
-        total: product.stock,
-        inAlmacen: Math.max(product.stock - outQuantity, 0),
-        fueraAlmacen: outQuantity
-      }
-    });
-    
-    
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error obteniendo estado del inventario',
-      error: error.message 
-    });
-  }
-};
-
-// Crear un nuevo producto
-const createProduct = async (req, res) => {
-    try {
-        const { type, item, description, stock } = req.body;
-        
-        if (!type) {
-            return res.status(400).json({
-                success: false,
-                message: 'Product type is required'
-            });
-        }
-
-        const product = new Product({
-            type,
-            item,
-            description,
-            stock
-        });
-
-        const savedProduct = await product.save();
-        
-        res.status(201).json({
-            success: true,
-            data: savedProduct
-        });
+        res.status(200).json({ success: true, data: rows[0] });
     } catch (error) {
-        console.error('Error en createProduct:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error creating product',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Error al obtener el producto' });
     }
 };
 
-// Actualizar un producto por ID
-const updateProduct = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { type, item, description, stock } = req.body;
-
-        // Primero verificamos si el producto existe
-        const existingProduct = await Product.findById(id);
-        if (!existingProduct) {
-            return res.status(404).json({
-                success: false,
-                message: 'Product not found'
-            });
-        }
-
-        // Actualizamos solo los campos permitidos
-        // Nota: el código no se puede actualizar por ser inmutable
-        const updatedProduct = await Product.findByIdAndUpdate(
-            id,
-            {
-                type,
-                item,
-                description,
-                stock
-            },
-            {
-                new: true, // Retorna el documento actualizado
-                runValidators: true // Ejecuta las validaciones del esquema
-            }
-        );
-
-        res.status(200).json({
-            success: true,
-            data: updatedProduct
-        });
-    } catch (error) {
-        console.error('Error en updateProduct:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error updating product',
-            error: error.message
-        });
-    }
-};
-
-// Eliminar un producto por ID
-const deleteProductById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const deletedProduct = await Product.findByIdAndDelete(id);
-        if (!deletedProduct) {
-            return res.status(404).json({
-                success: false,
-                message: 'Producto no encontrado'
-            });
-        }
-        res.status(200).json({
-            success: true,
-            data: deletedProduct
-        });
-    } catch (error) {
-        console.error('Error en deleteProductById:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error al eliminar el producto',
-            error: error.message
-        });
-    }
-};
-
-// Obtener un producto por código
 const getProductByBarcode = async (req, res) => {
     try {
-      const { code } = req.params;
-      
-      const product = await Product.findOne({ code });
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'No se encontró ningún producto con este código'
-        });
-      }
-      
-      res.status(200).json({
-        success: true,
-        data: product
-      });
-      
+        const [rows] = await pool.query(`
+            SELECT p.*, c.name AS category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.code = ?
+        `, [req.params.code]);
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+        }
+        res.status(200).json({ success: true, data: rows[0] });
     } catch (error) {
-      console.error('Error en getProductByBarcode:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al buscar el producto por código',
-        error: error.message
-      });
+        res.status(500).json({ success: false, message: 'Error al buscar por código' });
     }
 };
-  
+
+const getAllProductsInventoryStatus = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                p.id, p.code, p.item, p.brand, p.stock AS total,
+                c.name AS category,
+                COALESCE(SUM(CASE WHEN t.type = 'OUT' THEN t.quantity ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN t.type = 'IN'  THEN t.quantity ELSE 0 END), 0) AS fueraAlmacen
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN transactions t ON p.id = t.product_id
+            GROUP BY p.id
+        `);
+
+        const data = rows.map(r => ({
+            ...r,
+            fueraAlmacen: Math.max(0, r.fueraAlmacen),
+            enAlmacen: Math.max(0, r.total - Math.max(0, r.fueraAlmacen))
+        }));
+
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al obtener estado del inventario' });
+    }
+};
+
+const getProductInventoryStatus = async (req, res) => {
+    try {
+        const [products] = await pool.query(
+            'SELECT * FROM products WHERE id = ?', 
+            [req.params.id]
+        );
+        if (products.length === 0) {
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+        }
+
+        const product = products[0];
+        const [txRows] = await pool.query(
+            'SELECT type, SUM(quantity) AS total FROM transactions WHERE product_id = ? GROUP BY type',
+            [req.params.id]
+        );
+
+        let outQty = 0, inQty = 0;
+        txRows.forEach(r => {
+            if (r.type === 'OUT') outQty = r.total;
+            if (r.type === 'IN')  inQty  = r.total;
+        });
+
+        const fueraAlmacen = Math.max(0, outQty - inQty);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                product: { id: product.id, code: product.code, item: product.item },
+                total: product.stock,
+                enAlmacen: Math.max(0, product.stock - fueraAlmacen),
+                fueraAlmacen
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al obtener estado del producto' });
+    }
+};
+
+const createProduct = async (req, res) => {
+    try {
+        const { category_id, brand, item, description, status, stock, min_stock, price, aisle, shelf, side } = req.body;
+
+        if (!category_id || !item) {
+            return res.status(400).json({ success: false, message: 'category_id e item son obligatorios' });
+        }
+
+        const [cats] = await pool.query('SELECT name FROM categories WHERE id = ?', [category_id]);
+        if (cats.length === 0) {
+            return res.status(400).json({ success: false, message: 'Categoría no encontrada' });
+        }
+
+        const code = await generateCode(cats[0].name, brand);
+
+        const [result] = await pool.query(
+            `INSERT INTO products 
+                (category_id, brand, item, description, status, stock, min_stock, price, code, aisle, shelf, side)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [category_id, brand, item, description, status || 'BUENO', stock || 0, min_stock || 2, price, code, aisle, shelf, side]
+        );
+
+        const [newProduct] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
+        res.status(201).json({ success: true, data: newProduct[0] });
+
+    } catch (error) {
+        console.error('Error en createProduct:', error);
+        res.status(500).json({ success: false, message: 'Error al crear producto' });
+    }
+};
+
+const updateProduct = async (req, res) => {
+    try {
+        const { category_id, brand, item, description, status, stock, min_stock, price, aisle, shelf, side } = req.body;
+
+        const [result] = await pool.query(
+            `UPDATE products SET
+                category_id = COALESCE(?, category_id),
+                brand       = COALESCE(?, brand),
+                item        = COALESCE(?, item),
+                description = COALESCE(?, description),
+                status      = COALESCE(?, status),
+                stock       = COALESCE(?, stock),
+                min_stock   = COALESCE(?, min_stock),
+                price       = COALESCE(?, price),
+                aisle       = COALESCE(?, aisle),
+                shelf       = COALESCE(?, shelf),
+                side        = COALESCE(?, side)
+            WHERE id = ?`,
+            [category_id, brand, item, description, status, stock, min_stock, price, aisle, shelf, side, req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+        }
+
+        const [updated] = await pool.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
+        res.status(200).json({ success: true, data: updated[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al actualizar producto' });
+    }
+};
+
+const deleteProductById = async (req, res) => {
+    try {
+        const [result] = await pool.query(
+            'DELETE FROM products WHERE id = ?', 
+            [req.params.id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+        }
+        res.status(200).json({ success: true, message: 'Producto eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al eliminar producto' });
+    }
+};
+
 module.exports = {
-    getProducts,
-    getProductById,
-    getProductInventoryStatus,
-    getProductByBarcode,
-    createProduct,
-    updateProduct,
-    deleteProductById,
-    getAllProductsInventoryStatus
+    getProducts, getProductById, getProductByBarcode,
+    getAllProductsInventoryStatus, getProductInventoryStatus,
+    createProduct, updateProduct, deleteProductById
 };
